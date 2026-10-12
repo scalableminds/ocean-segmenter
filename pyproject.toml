@@ -1,0 +1,26 @@
+[project]
+name = "ocean-segmenter"
+version = "0.1.0"
+description = "Threshold-based segmentation layers + Neuroglancer meshes from ocean Zarr data (MyOcean prototype)"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "tensorstore>=0.1.70",
+    "connected-components-3d>=4.0",
+    "serra-mesh>=0.2",
+    "DracoPy>=1.4",
+    "pydantic-settings>=2.7",
+]
+
+[project.scripts]
+ocean-seg = "ocean_segmenter.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
