@@ -36,7 +36,7 @@ class SegmentRequest(BaseModel):
     )
     output_url: str = Field(description="Output Zarr group: local path or s3://bucket/path.zarr")
     layer_name: str | None = Field(default=None, description="Name of the label array. Default: 'segmentation'.")
-    connectivity: Literal[6, 26] = 6
+    connectivity: Literal[6, 26] = 26
     min_voxels: int = Field(default=0, ge=0, description="Drop connected components smaller than this.")
     mesh: bool = True
     s3_endpoint: str | None = Field(default=None, description="Endpoint for s3:// URLs (e.g. CloudFerro, MinIO).")

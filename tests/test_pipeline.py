@@ -98,11 +98,8 @@ def test_metadata_and_view_state(source, tmp_path):
     assert so["source"]["transform"]["matrix"][0] == [1, 0, 0, 0, -1]  # output t=0 is source t=1
     assert "raw == -32767" in so["shader"] and "1.000000000e-02" in so["shader"]
 
-    # 2. the viewer state carries the metadata: title + hidden annotation with the full JSON
+    # 2. the viewer state title summarizes the run
     layer, dims, shape, ids = neuroglancer.layer_meta(out)
     state = neuroglancer.state("http://x", layer, dims, shape, ids, layers, meta)
     assert state["title"] == "so in [34, inf] AND thetao in [-inf, 5] @ 2021-06-30..2021-07-01"
-    assert [lyr["type"] for lyr in state["layers"]] == ["image", "image", "segmentation", "annotation"]
-    note = state["layers"][-1]
-    assert note["visible"] is False and json.loads(note["annotations"][0]["description"]) == meta
-    assert len(note["annotations"][0]["point"]) == len(dims)
+    assert [lyr["type"] for lyr in state["layers"]] == ["image", "image", "segmentation"]

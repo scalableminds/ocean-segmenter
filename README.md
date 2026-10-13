@@ -26,9 +26,16 @@ uv run ocean-seg segment \
   --output-url out/so_band.zarr
 
 # Multivariate rule (AND or OR over per-variable ranges)
-uv run ocean-seg segment --source-url <group-url> \
+uv run ocean-seg segment --source-url https://s3.waw3-1.cloudferro.com/mdl-arco-time-025/arco/GLOBAL_MULTIYEAR_PHY_001_030/cmems_mod_glo_phy_my_0.083deg_P1D-m_202311/timeChunked.zarr/ \
   --rules '[{"variable":"so","min":34.5,"max":35},{"variable":"thetao","min":2,"max":4}]' --op and \
-  --time 2021-06-01/2021-06-07 --output-url s3://my-bucket/layers/aaiw.zarr --s3-endpoint https://s3.waw3-1.cloudferro.com
+  --time 2021-06-01/2021-06-07 --output-url s3://my-bucket/layers/antarctic_intermediate_water.zarr --s3-endpoint https://s3.waw3-1.cloudferro.com
+
+# Regional dataset: Mediterranean Sea (4.2 km, 141 levels). Temperature is a separate
+# dataset, so each request uses one variable. Here: the saltiest water (>= 39) on one summer day.
+uv run ocean-seg segment \
+  --source-url https://s3.waw3-1.cloudferro.com/mdl-arco-time-035/arco/MEDSEA_MULTIYEAR_PHY_006_004/cmems_mod_med_phy-sal_my_4.2km_P1D-m_202511/timeChunked.zarr/so/ \
+  --min 39 --time 2021-08-15 --min-voxels 100 \
+  --output-url out/med_salty.zarr
 
 # Look at a result in Neuroglancer. Local outputs are served with CORS on http://127.0.0.1:<port>
 # (--port, default 8765; a free port is picked if it is taken).
@@ -48,7 +55,7 @@ To get one layer per variable, send one request per variable, for example with d
 | `rules` / `min`,`max` | per-variable inclusive ranges / shorthand for the variable in `source_url` |
 | `op` | `and` / `or` to combine the rules |
 | `time` | index, ISO date, or `start/end` (inclusive). Default is the first step. The spatial extent is always the full layer. |
-| `connectivity` | 6 (faces) or 26 |
+| `connectivity` | 26 (default) or 6 (faces only) |
 | `min_voxels` | drop components smaller than this |
 | `mesh` | write meshes (default `true`) |
 | `layer_name`, `output_url`, `s3_endpoint` | output location |
@@ -71,7 +78,7 @@ To get one layer per variable, send one request per variable, for example with d
 - Segment IDs are unique across time steps, so a single mesh source covers the whole 4D layer.
 - Mesh vertices are in **voxel index space**: x is longitude, y is latitude, and z is the vertical-level index in source order, with voxel *i* spanning [i, i+1). Real coordinates come from the coordinate arrays. In the CMEMS ARCO stores `elevation` is negative and deepest-first (index 0 is about -5728 m), and the levels are not evenly spaced.
 - Chunks that answer **403** are treated as missing (fill value), as the Copernicus Marine toolbox does. These S3 buckets don't allow listing, so absent all-land chunks, such as most of the deepest level, return 403 instead of 404.
-- The `view` link is built from `<layer>.metadata.json` and carries it along: the page title is a short summary (e.g. `thetao in [28, inf] @ 2021-06-30`), and a hidden annotation layer `metadata` holds the full JSON as the description of its single annotation. Neuroglancer drops unknown state keys, so this is the place that survives.
+- The `view` link is built from `<layer>.metadata.json`; the page title is a short summary of the run (e.g. `thetao in [28, inf] @ 2021-06-30`). The full metadata stays in the output's `.zattrs` and `<layer>.metadata.json`.
 - In the `view` link, each source variable is an image layer read straight from its Zarr store (CMEMS sends CORS headers). A time translation aligns it with the output's selected time steps, and the shader decodes `scale_factor`/`add_offset`, with `lo`/`hi` sliders in physical units and land made transparent.
 - Neuroglancer treats mesh units as nm. The state from `ocean-seg view` therefore scales the mesh source by 1e9, so the meshes land on the voxel grid.
 

@@ -7,6 +7,7 @@ from . import store
 
 DEFAULT_VIEWER = "https://neuroglancer-demo.appspot.com/"
 MAX_VISIBLE_SEGMENTS = 1000
+DEPTH_SCALE = 50.0  # vertical exaggeration (relativeDisplayScales) of the elevation dimension
 
 
 def state(
@@ -17,6 +18,7 @@ def state(
     segment_ids: list[str] = (),
     source_layers: list[dict] = (),
     metadata: dict | None = None,
+    depth_scale: float = DEPTH_SCALE,
 ) -> dict:
     """Viewer state showing the label array plus its meshes, in voxel index space.
 
@@ -24,9 +26,10 @@ def state(
     unitless voxel indices. The mesh source transform therefore scales by 1e9 (nm -> 1 voxel) and
     maps x -> last dim (longitude), y -> second to last (latitude), z -> third to last (vertical level).
 
-    With `metadata` (the run's <layer>.metadata.json), the page title gets a short summary and a hidden
-    annotation layer "metadata" carries the full JSON as an annotation description, so it travels with
-    the URL (Neuroglancer drops unknown keys from its state).
+    The vertical dimension is exaggerated by `depth_scale` via `relativeDisplayScales`, a display-only
+    setting: labels and meshes are stretched together, coordinates and mesh data are unchanged.
+
+    With `metadata` (the run's <layer>.metadata.json), the page title gets a short summary.
     """
     base_url = base_url.rstrip("/")
     spatial = dims[1:]
@@ -45,25 +48,12 @@ def state(
             }
         )
     position = [0.5] + [s / 2 for s in shape[1:]]
-    extra = {}
-    meta_layers = []
-    if metadata:
-        extra["title"] = summary(metadata)
-        meta_layers.append(
-            {
-                "type": "annotation",
-                "name": "metadata",
-                "source": "local://annotations",
-                "annotations": [
-                    {"type": "point", "id": "metadata", "point": position, "description": json.dumps(metadata, indent=1)}
-                ],
-                "visible": False,
-            }
-        )
+    extra = {"title": summary(metadata)} if metadata else {}
     return {
         **extra,
         "dimensions": out_dims,
         "displayDimensions": mesh_axes,
+        **({"relativeDisplayScales": {spatial[0]: depth_scale}} if len(spatial) == 3 else {}),
         # Neuroglancer draws y downward; latitude increases northward. Rotate 180° about x -> north up.
         "crossSectionOrientation": [1, 0, 0, 0],
         "projectionOrientation": [1, 0, 0, 0],
@@ -79,7 +69,6 @@ def state(
                 "segments": list(segment_ids)[:MAX_VISIBLE_SEGMENTS],
                 "tab": "segments",
             },
-            *meta_layers,
         ],
         "layout": "xy-3d",
     }
