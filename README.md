@@ -47,6 +47,31 @@ uv run ocean-seg view out/so_band.zarr --print-json
 
 To get one layer per variable, send one request per variable, for example with different `--layer-name`s into the same output group.
 
+## Python API
+
+The CLI is a thin wrapper around `run(SegmentRequest) -> SegmentResult`, so the same fields work from Python:
+
+```python
+from ocean_segmenter import SegmentRequest, ThresholdRule, run
+
+req = SegmentRequest(
+    source_url="https://s3.waw3-1.cloudferro.com/mdl-arco-time-025/arco/GLOBAL_MULTIYEAR_PHY_001_030/cmems_mod_glo_phy_my_0.083deg_P1D-m_202311/timeChunked.zarr/",
+    rules=[ThresholdRule(variable="so", min=34.5, max=35), ThresholdRule(variable="thetao", min=2, max=4)],
+    op="and",
+    time="2021-06-01/2021-06-07",
+    output_url="out/aaiw.zarr",
+)
+
+def on_progress(step: int, total: int, stage: str) -> None:
+    print(f"{step}/{total} {stage}")  # stage: threshold | write | mesh | done
+    # raise an exception here to cancel; it propagates out of run()
+
+result = run(req, on_progress=on_progress)
+print(result.num_segments, result.layer_path, result.mesh_path)
+```
+
+`run` is blocking. In an async app, call it with `await asyncio.to_thread(run, req)`. Progress is also logged to the `ocean_segmenter` logger.
+
 ## Request fields
 
 | field | meaning |

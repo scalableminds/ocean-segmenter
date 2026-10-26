@@ -103,3 +103,27 @@ def test_metadata_and_view_state(source, tmp_path):
     state = neuroglancer.state("http://x", layer, dims, shape, ids, layers, meta)
     assert state["title"] == "so in [34, inf] AND thetao in [-inf, 5] @ 2021-06-30..2021-07-01"
     assert [lyr["type"] for lyr in state["layers"]] == ["image", "image", "segmentation"]
+
+
+def test_public_api_progress_and_cancel(source, tmp_path):
+    from ocean_segmenter import SegmentRequest as Req, run
+
+    req = Req(source_url=source + "/so/", min=34, max=36, time="0/1", output_url=str(tmp_path / "o.zarr"))
+    calls = []
+    res = run(req, on_progress=lambda step, total, stage: calls.append((step, total, stage)))
+    assert res.num_segments == 4
+    assert calls == [
+        (0, 2, "threshold"), (0, 2, "write"), (0, 2, "mesh"),
+        (1, 2, "threshold"), (1, 2, "write"), (1, 2, "mesh"),
+        (2, 2, "done"),
+    ]
+
+    class Cancelled(Exception):
+        pass
+
+    def cancel(step, total, stage):
+        if step == 1:
+            raise Cancelled
+
+    with pytest.raises(Cancelled):
+        run(req.model_copy(update={"output_url": str(tmp_path / "c.zarr")}), on_progress=cancel)
