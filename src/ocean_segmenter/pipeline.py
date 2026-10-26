@@ -3,6 +3,7 @@
 import importlib.metadata
 import logging
 import warnings
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 import numpy as np
@@ -14,6 +15,11 @@ from .source import TIME_DIM, Source, Variable
 from .writer import OutputGroup
 
 log = logging.getLogger(__name__)
+
+# on_progress(step, total, stage): step is the 0-based time step being processed, total the number of time
+# steps, stage one of "threshold", "write", "mesh", or "done" (called once at the end with step == total).
+# Raise from the callback to cancel the run; the exception propagates out of `run`.
+ProgressCallback = Callable[[int, int, str], None]
 
 
 def _resolve_rules(req: SegmentRequest, src: Source) -> list[ThresholdRule]:
@@ -52,7 +58,8 @@ def _mask_time_step(
     return out
 
 
-def run(req: SegmentRequest) -> SegmentResult:
+def run(req: SegmentRequest, on_progress: ProgressCallback | None = None) -> SegmentResult:
+    progress = on_progress or (lambda step, total, stage: None)
     src = Source(req.source_url, req.s3_endpoint)
     rules = _resolve_rules(req, src)
     variables = {r.variable: src.variable(r.variable) for r in rules}
@@ -98,6 +105,7 @@ def run(req: SegmentRequest) -> SegmentResult:
     offset = 0
     for i, (t, dt) in enumerate(zip(time_indices, time_dts)):
         log.info("time %s (%d/%d): thresholding", dt.date(), i + 1, len(time_indices))
+        progress(i, len(time_indices), "threshold")
         mask = _mask_time_step(variables, rules, req.op, dims, t)
         labels, counts = segment.label(mask, req.connectivity, req.min_voxels, wrap_last_axis=True)
         del mask
@@ -105,9 +113,11 @@ def run(req: SegmentRequest) -> SegmentResult:
         ids = range(offset + 1, offset + len(counts) + 1)
         segments += [SegmentInfo(id=j, voxel_count=int(c), time_index=i) for j, c in zip(ids, counts)]
         log.info("time %s: %d segments, writing labels", dt.date(), len(counts))
+        progress(i, len(time_indices), "write")
         labels_arr[i].write(labels).result()
         if meshes is not None and len(counts):
             log.info("time %s: meshing", dt.date())
+            progress(i, len(time_indices), "mesh")
             meshes.mesh_volume(labels, i, f"{rule_text} @ {dt.date()}", dict(zip(ids, counts.tolist())))
         offset += len(counts)
 
@@ -147,6 +157,7 @@ def run(req: SegmentRequest) -> SegmentResult:
     store.write_json(out.kv, metadata_key, metadata)
     out.update_attrs(layer, dims, metadata)
     out.consolidate()
+    progress(len(time_indices), len(time_indices), "done")
     return SegmentResult(
         output_url=req.output_url,
         layer_path=store.join(req.output_url, layer),
